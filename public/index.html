@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clinic Booking</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #fff; --ink: #1c2430; --muted: #5d6b7c; --line: #dde2e8;
+    --accent: #0b6e5f; --accent-ink: #fff; --soft: #e6f3f0; --danger: #b42318; --danger-soft: #fdecea;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #11161c; --card: #1a2129; --ink: #e8edf2; --muted: #9aa8b6; --line: #2c3742;
+      --accent: #3fb8a3; --accent-ink: #062a24; --soft: #183630; --danger: #ff8a7a; --danger-soft: #3a1d1a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  h2 { font-size: 17px; margin: 0 0 12px; }
+  p.lead { margin: 0 0 20px; color: var(--muted); }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+  input, select { width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--bg); color: var(--ink); font: inherit; }
+  button { padding: 9px 14px; border: 0; border-radius: 7px; background: var(--accent); color: var(--accent-ink); font: inherit; font-weight: 600; cursor: pointer; }
+  button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--line); }
+  button.danger { background: transparent; color: var(--danger); border: 1px solid var(--line); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .row { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; }
+  .row > .grow { flex: 1 1 200px; }
+  .day { margin: 14px 0 6px; font-weight: 600; font-size: 14px; }
+  .slots { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
+  .slot { text-align: left; background: var(--bg); color: var(--ink); border: 1px solid var(--line); font-weight: 400; }
+  .slot strong { display: block; }
+  .slot span { color: var(--muted); font-size: 13px; }
+  .slot[aria-pressed="true"] { border-color: var(--accent); background: var(--soft); }
+  .slot:disabled span::after { content: " · taken"; }
+  .msg { padding: 10px 12px; border-radius: 7px; margin-top: 12px; }
+  .msg.error { background: var(--danger-soft); color: var(--danger); }
+  .msg.ok { background: var(--soft); }
+  dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 0 0 12px; }
+  dt { color: var(--muted); }
+  dd { margin: 0; overflow-wrap: anywhere; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 500; }
+  .badge { display: inline-block; padding: 1px 8px; border-radius: 99px; font-size: 12px; background: var(--soft); }
+  .badge.cancelled { background: var(--danger-soft); color: var(--danger); }
+  .muted { color: var(--muted); }
+  .hidden { display: none; }
+  @media (max-width: 560px) { th:nth-child(1), td:nth-child(1) { display: none; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Clinic booking</h1>
+  <p class="lead">Pick an open appointment, book it, and keep your confirmation.</p>
+
+  <section id="key-section">
+    <form id="key-form" class="row">
+      <div class="grow">
+        <label for="api-key">API key</label>
+        <input id="api-key" type="password" autocomplete="off" placeholder="Paste the clinic API key" required>
+      </div>
+      <button type="submit">Save key</button>
+    </form>
+    <p class="muted" style="margin:8px 0 0;font-size:13px">Stored only in this browser and sent as <code>X-API-Key</code> with each request.</p>
+  </section>
+
+  <section>
+    <div class="row">
+      <h2 class="grow" style="margin:0">Available slots</h2>
+      <select id="provider" aria-label="Filter by provider" style="width:auto"><option value="">All providers</option></select>
+      <button class="secondary" id="refresh" type="button">Refresh</button>
+    </div>
+    <div id="slots"><p class="muted">Loading…</p></div>
+  </section>
+
+  <section id="book-section" class="hidden">
+    <h2>Book <span id="book-title"></span></h2>
+    <form id="book-form">
+      <div class="row">
+        <div class="grow"><label for="name">Full name</label><input id="name" autocomplete="name" required></div>
+        <div class="grow"><label for="email">Email</label><input id="email" type="email" autocomplete="email" required></div>
+        <button type="submit" id="book-btn">Confirm booking</button>
+      </div>
+    </form>
+    <div id="book-msg"></div>
+  </section>
+
+  <section id="confirmation" class="hidden">
+    <h2>Booking confirmation</h2>
+    <dl id="conf-details"></dl>
+    <button class="danger" id="cancel-btn" type="button">Cancel this booking</button>
+    <div id="conf-msg"></div>
+  </section>
+
+  <section>
+    <h2>Find bookings</h2>
+    <form id="lookup-form" class="row">
+      <div class="grow"><label for="lookup-id">Booking ID</label><input id="lookup-id" placeholder="bk_…"></div>
+      <button type="submit" class="secondary">Look up</button>
+    </form>
+    <form id="mine-form" class="row" style="margin-top:12px">
+      <div class="grow"><label for="mine-email">Or all bookings for an email</label><input id="mine-email" type="email"></div>
+      <button type="submit" class="secondary">Show bookings</button>
+    </form>
+    <div id="mine"></div>
+    <div id="lookup-msg"></div>
+  </section>
+</main>
+<script src="app.js"></script>
+</body>
+</html>
