@@ -93,13 +93,25 @@ async function insertSlots(client, slots) {
 
 let ready;
 
-// Creates the tables once per process. The advisory lock stops two cold starts racing on CREATE.
+// The last object SCHEMA creates; if it exists, the schema is fully in place.
+const schemaExists = async (db) =>
+  (await db.query(`SELECT to_regclass('public.booking_attempts_by_email') IS NOT NULL AS ok`)).rows[0].ok;
+
+// Creates the tables once per process, and only if they're missing. This matters on serverless, where
+// every cold start runs it: even CREATE INDEX IF NOT EXISTS locks its table, and doing that while
+// bookings are in flight deadlocks them. The read-only check takes no locks.
+// The advisory lock stops two cold starts on a fresh database racing on CREATE.
 function ensureSchema() {
   ready ??= (async () => {
+    if (await schemaExists(pool)) return;
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
       await client.query('SELECT pg_advisory_xact_lock(4242)');
+      if (await schemaExists(client)) {
+        await client.query('COMMIT');
+        return;
+      }
       await client.query(SCHEMA);
       const { rows } = await client.query('SELECT count(*)::int AS n FROM slots');
       if (rows[0].n === 0) await insertSlots(client, demoSlots());
@@ -115,18 +127,26 @@ function ensureSchema() {
   return ready;
 }
 
+// Postgres aborts a transaction to break a deadlock (40P01) or a serialization conflict (40001).
+// Everything it did was rolled back, so running it again from the start is safe.
+const RETRYABLE = new Set(['40P01', '40001']);
+const MAX_ATTEMPTS = 3;
+
 async function withTransaction(fn) {
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    const result = await fn(client);
-    await client.query('COMMIT');
-    return result;
-  } catch (err) {
-    await client.query('ROLLBACK').catch(() => {});
-    throw err;
-  } finally {
-    client.release();
+  for (let attempt = 1; ; attempt++) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const result = await fn(client);
+      await client.query('COMMIT');
+      return result;
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      if (!RETRYABLE.has(err.code) || attempt === MAX_ATTEMPTS) throw err;
+    } finally {
+      client.release();
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10 + Math.random() * 40 * attempt));
   }
 }
 
