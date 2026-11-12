@@ -231,7 +231,7 @@ function renderMine({ bookings, next_cursor }, append) {
     const view = el('button', { type: 'button', className: 'secondary', textContent: 'View' });
     view.addEventListener('click', () => showConfirmation(b));
     tbody.append(el('tr', {},
-      el('td', { textContent: b.id.slice(0, 11) + '…' }),
+      el('td', { className: 'id', textContent: b.id }),
       el('td', { textContent: slot ? fmtSlot(slot) : b.slot_id }),
       el('td', {}, el('span', { className: `badge ${b.status}`, textContent: b.status })),
       el('td', {}, view)));
