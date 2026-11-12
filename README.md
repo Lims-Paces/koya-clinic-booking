@@ -21,8 +21,8 @@ test/api.test.js      end-to-end tests for every level
 
 | | |
 |---|---|
-| API base URL | `https://<your-deployment>.vercel.app` |
-| Web page | same URL, at `/` |
+| API base URL | `https://koya-clinic-booking-phi.vercel.app` |
+| Web page | [koya-clinic-booking-phi.vercel.app](https://koya-clinic-booking-phi.vercel.app) (same app, at `/`) |
 
 ## Endpoints
 
@@ -66,6 +66,15 @@ Each booking attempt for an email is recorded in Postgres, not in memory, becaus
 
 ### Web page
 `public/` is a plain HTML/JS page served from the same origin. It asks for the API key once and keeps it in the browser's `localStorage`. The key isn't built into the page's JavaScript, because anyone can read that, and Level 2 would mean nothing. Each booking attempt sends a fresh `Idempotency-Key`. After a network error the page reuses the same key, so clicking "Confirm" again can't book twice.
+
+## A bug that only showed up in production
+Every test passed locally, but on Vercel a burst of simultaneous bookings returned a few 500s. Bookings were never doubled, but some requests that should have got 409 failed instead. The 500s only appeared once Vercel started extra instances to handle the burst. Each new instance ran the schema setup on its first request. `CREATE INDEX IF NOT EXISTS` locks its table even when the index already exists, and that lock formed a cycle with in-flight bookings: a deadlock (Postgres error `40P01`).
+
+I reproduced it locally by running the schema SQL in a loop during a booking race (51 deadlocks), then fixed it in two ways:
+1. **The cause:** a cold start first runs a read-only check that takes no locks, and skips setup entirely if the schema already exists.
+2. **A backstop:** a transaction that Postgres aborts for a deadlock or serialization failure is retried, up to three times with jittered backoff. This is safe because the abort has already rolled everything back.
+
+After the fix, the live site handled 10 rounds of 25 simultaneous bookings and 3 rounds of 100 with no errors and exactly one booking per slot.
 
 ## Trade-offs and what I'd do next
 - **Per-email rate limiting only**, as the spec asks. A spammer can rotate email addresses, so in production I'd also limit per API key and per IP.
