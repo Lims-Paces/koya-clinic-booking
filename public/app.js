@@ -67,7 +67,13 @@ function fillProviders(slots) {
   $('provider').value = names.includes(current) ? current : '';
 }
 
-function renderSlots(slots) {
+// Months of slots would make one endless list, so show a few days and let people ask for more.
+const DAYS_PER_PAGE = 5;
+let daysShown = DAYS_PER_PAGE;
+let upcoming = [];
+
+function renderSlots(slots = upcoming) {
+  upcoming = slots;
   if (!slots.length) {
     $('slots').replaceChildren(el('p', { className: 'muted', textContent: 'No upcoming slots.' }));
     return;
@@ -75,8 +81,11 @@ function renderSlots(slots) {
   const out = [];
   let day = null;
   let grid = null;
+  let days = 0;
   for (const s of slots) {
     if (fmtDay(s.start) !== day) {
+      if (days === daysShown) break;
+      days++;
       day = fmtDay(s.start);
       grid = el('div', { className: 'slots' });
       out.push(el('div', { className: 'day', textContent: day }), grid);
@@ -87,6 +96,14 @@ function renderSlots(slots) {
     btn.setAttribute('aria-pressed', String(selected === s.id));
     btn.addEventListener('click', () => selectSlot(s.id, btn));
     grid.append(btn);
+  }
+  if (fmtDay(slots[slots.length - 1].start) !== day) {
+    const more = el('button', { type: 'button', className: 'secondary', textContent: 'Show more days', style: 'margin-top:14px' });
+    more.addEventListener('click', () => {
+      daysShown += DAYS_PER_PAGE;
+      renderSlots();
+    });
+    out.push(more);
   }
   $('slots').replaceChildren(...out);
 }
@@ -227,7 +244,10 @@ $('key-form').addEventListener('submit', (e) => {
   loadSlots();
 });
 
-$('provider').addEventListener('change', loadSlots);
+$('provider').addEventListener('change', () => {
+  daysShown = DAYS_PER_PAGE;
+  loadSlots();
+});
 $('refresh').addEventListener('click', loadSlots);
 
 if (apiKey) {
