@@ -50,6 +50,13 @@
   .badge.cancelled { background: var(--danger-soft); color: var(--danger); }
   .muted { color: var(--muted); }
   .hidden { display: none; }
+  button.danger-solid { background: var(--danger); color: var(--card); }
+  dialog { padding: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--ink); width: min(420px, calc(100% - 32px)); }
+  dialog::backdrop { background: rgb(0 0 0 / .5); }
+  dialog .body { padding: 20px; }
+  dialog h2 { margin-bottom: 8px; }
+  dialog p { margin: 0 0 20px; color: var(--muted); }
+  dialog .actions { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
   @media (max-width: 560px) { th:nth-child(1), td:nth-child(1) { display: none; } }
 </style>
 </head>
@@ -111,6 +118,17 @@
     <div id="lookup-msg"></div>
   </section>
 </main>
+
+<dialog id="cancel-dialog" aria-labelledby="cancel-dialog-title">
+  <form method="dialog" class="body">
+    <h2 id="cancel-dialog-title">Cancel this booking?</h2>
+    <p>Your appointment with <strong id="cancel-what"></strong> will be cancelled and the slot will be offered to other patients.</p>
+    <div class="actions">
+      <button value="keep" class="secondary" autofocus>Keep booking</button>
+      <button value="confirm" class="danger-solid">Yes, cancel it</button>
+    </div>
+  </form>
+</dialog>
 <script src="app.js"></script>
 </body>
 </html>

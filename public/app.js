@@ -166,14 +166,30 @@ function showConfirmation(booking, note) {
   $('confirmation').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
-$('cancel-btn').addEventListener('click', async () => {
-  if (!shownBooking || !confirm('Cancel this booking?')) return;
+// Ask before cancelling. The dialog's buttons set its returnValue; Escape or a click outside leaves it empty.
+$('cancel-btn').addEventListener('click', () => {
+  if (!shownBooking) return;
+  const slot = slotsById[shownBooking.slot_id];
+  $('cancel-what').textContent = slot ? fmtSlot(slot) : shownBooking.slot_id;
+  $('cancel-dialog').returnValue = '';
+  $('cancel-dialog').showModal();
+});
+
+$('cancel-dialog').addEventListener('click', (e) => {
+  if (e.target === $('cancel-dialog')) $('cancel-dialog').close();
+});
+
+$('cancel-dialog').addEventListener('close', async () => {
+  if ($('cancel-dialog').returnValue !== 'confirm') return;
+  $('cancel-btn').disabled = true;
   try {
     const booking = await api(`/bookings/${encodeURIComponent(shownBooking.id)}`, { method: 'DELETE' });
     showConfirmation(booking, 'Your booking has been cancelled and the slot is free again.');
     loadSlots();
   } catch (err) {
     showMsg('conf-msg', describeError(err));
+  } finally {
+    $('cancel-btn').disabled = false;
   }
 });
 
